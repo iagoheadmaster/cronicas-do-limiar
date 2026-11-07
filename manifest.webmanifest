@@ -1,0 +1,19 @@
+{
+  "name": "Crônicas do Limiar // Neon",
+  "short_name": "Limiar Neon",
+  "description": "RPG de vida real com missões, classes, tutorial e progresso salvo no navegador.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "theme_color": "#07101d",
+  "background_color": "#070b16",
+  "lang": "pt-BR",
+  "icons": [
+    {
+      "src": "./icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

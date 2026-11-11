@@ -4,6 +4,7 @@
 
 const STORAGE_KEY='cronicas-do-limiar-neon-v2';
 const TUTORIAL_KEY='cronicas-do-limiar-tutorial-v1';
+const QUICKSTART_KEY='cronicas-do-limiar-primeiros-passos-v1';
 const TUTORIAL_STEPS=[
   {icon:'◈',tag:'INÍCIO',title:'Bem-vindo ao seu RPG!',lead:'Este jogo transforma coisas da vida real em pontos. Não precisa saber jogar RPG para começar.',example:'Tomar água, trabalhar, estudar, descansar, cuidar de alguém ou se divertir: tudo isso pode virar uma missão.',tip:'Você escolhe as ações que combinam com seu dia. Não há pressa nem punição.'},
   {icon:'◎',tag:'PERSONAGEM',title:'Este é o seu personagem',lead:'Ele representa você dentro do jogo. Você pode escolher um nome e uma classe.',example:'Abra “Personagem” para trocar o nome e escolher uma classe. Pode mudar a classe depois sem perder seu progresso.',tip:'Se quiser, deixe tudo como está agora. Dá para personalizar depois.'},
@@ -101,6 +102,9 @@ let tutorialOpen=false;
 let tutorialStep=0;
 let tutorialReturnFocus=null;
 let coachActive=false;
+let quickStartOpen=false;
+let feedbackOpen=false;
+let overlayPreviousFocus=null;
 function todayKey(date=new Date()){return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;}
 function fromKey(key){const [y,m,d]=key.split('-').map(Number);return new Date(y,m-1,d,12);}
 function weekKey(date=new Date()){const d=new Date(date);const offset=(d.getDay()+6)%7;d.setDate(d.getDate()-offset);return todayKey(d);}
@@ -135,6 +139,57 @@ function daysThisWeekFor(key){const end=new Date(fromKey(key));end.setDate(end.g
 function daysThisWeek(){return daysThisWeekFor(weekKey());}
 function getRank(level){if(level>=20)return 'Lenda do Neon';if(level>=12)return 'Veterano do Grid';if(level>=8)return 'Operador Tático';if(level>=5)return 'Nômade de Dados';if(level>=3)return 'Agente em Ascensão';return 'Desperto';}
 function showToast(msg){const el=document.getElementById('toast');if(!el)return;el.textContent=msg;el.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('show'),3200);}
+
+function overlayRoot(id){let el=document.getElementById(id);if(!el){el=document.createElement('div');el.id=id;document.body.append(el);}return el;}
+function showQuickStart(){
+ if(tutorialOpen||feedbackOpen||quickStartOpen)return;
+ quickStartOpen=true;overlayPreviousFocus=document.activeElement instanceof HTMLElement?document.activeElement:null;
+ document.getElementById('app').inert=true;document.body.classList.add('tutorial-active');
+ overlayRoot('quickstart-root').innerHTML=`<div class="welcome-overlay"><section class="welcome-dialog" role="dialog" aria-modal="true" aria-labelledby="welcome-title">
+ <div class="welcome-kicker">◈ CRÔNICAS DO LIMIAR // NEON</div><h2 id="welcome-title">Sua vida já é uma aventura.</h2><p>Experimente o jogo em menos de um minuto. Não precisa saber RPG.</p>
+ <div class="welcome-steps"><div><span>01</span><strong>Viva</strong><small>Faça algo comum, como beber água ou organizar seu espaço.</small></div><div><span>02</span><strong>Marque</strong><small>Registre a ação na Central de Missões.</small></div><div><span>03</span><strong>Evolua</strong><small>Ganhe XP e descubra seus próximos desafios.</small></div></div>
+ <button type="button" class="btn btn-primary welcome-main" data-quick="play">Começar minha primeira missão →</button>
+ <div class="welcome-other"><button type="button" data-quick="tutorial">Ver tutorial completo</button><button type="button" data-quick="dismiss">Explorar sozinho</button></div>
+ <p class="welcome-calm">Sem cadastro. Sem competição. Descansar também conta.</p></section></div>`;
+ overlayRoot('quickstart-root').querySelector('[data-quick="play"]').focus({preventScroll:true});
+}
+function closeQuickStart(toMission=false){
+ if(!quickStartOpen)return;
+ quickStartOpen=false;overlayRoot('quickstart-root').replaceChildren();document.body.classList.remove('tutorial-active');document.getElementById('app').inert=false;
+ try{localStorage.setItem(QUICKSTART_KEY,'seen');}catch(e){}
+ if(toMission){coachActive=true;view='missoes';taskFilter='essencias';render();window.scrollTo({top:0,behavior:'instant'});
+  document.querySelector('.coach-banner')?.scrollIntoView({block:'start'});document.querySelector('.intro-highlight .task-check')?.focus({preventScroll:true});
+ }else if(overlayPreviousFocus?.isConnected){overlayPreviousFocus.focus({preventScroll:true});}
+ overlayPreviousFocus=null;
+}
+function handleQuickStart(action){
+ if(action==='open'){showQuickStart();return;}
+ if(!quickStartOpen)return;
+ if(action==='play'){closeQuickStart(true);return;}
+ if(action==='tutorial'){closeQuickStart();openTutorial();return;}
+ if(action==='dismiss')closeQuickStart();
+}
+function openFeedback(){
+ if(quickStartOpen||tutorialOpen||feedbackOpen)return;
+ feedbackOpen=true;overlayPreviousFocus=document.activeElement instanceof HTMLElement?document.activeElement:null;
+ document.getElementById('app').inert=true;document.body.classList.add('tutorial-active');
+ overlayRoot('feedback-root').innerHTML=`<div class="welcome-overlay"><section class="welcome-dialog feedback-dialog" role="dialog" aria-modal="true" aria-labelledby="feedback-title">
+ <div class="welcome-kicker">◎ TESTE COM AMIGOS</div><h2 id="feedback-title">Como foi sua experiência?</h2><p>Responda três perguntas rápidas. Nenhuma resposta é enviada automaticamente.</p>
+ <label for="feedback-good">1. O que foi fácil ou divertido?</label><textarea id="feedback-good" maxlength="500" placeholder="O que você gostou?"></textarea>
+ <label for="feedback-confusing">2. O que confundiu ou travou?</label><textarea id="feedback-confusing" maxlength="500" placeholder="Onde você ficou em dúvida?"></textarea>
+ <label for="feedback-improve">3. O que melhoraria?</label><textarea id="feedback-improve" maxlength="500" placeholder="Que mudança faria diferença?"></textarea>
+ <div class="welcome-other"><button type="button" class="btn btn-alt" data-feedback="close">Fechar</button><button type="button" class="btn btn-primary" data-feedback="copy">Copiar respostas</button></div>
+ <p class="welcome-calm">Copie e mande as respostas para quem te enviou o jogo. Evite dados pessoais.</p></section></div>`;
+ document.getElementById('feedback-good')?.focus({preventScroll:true});
+}
+function closeFeedback(){if(!feedbackOpen)return;feedbackOpen=false;overlayRoot('feedback-root').replaceChildren();document.body.classList.remove('tutorial-active');document.getElementById('app').inert=false;if(overlayPreviousFocus?.isConnected)overlayPreviousFocus.focus({preventScroll:true});overlayPreviousFocus=null;}
+async function copyFeedback(){
+ const answer=id=>document.getElementById(id)?.value.trim()||'Sem resposta';
+ const txt=['Crônicas do Limiar // Neon - feedback de teste','','1. O que foi fácil ou divertido?',answer('feedback-good'),'','2. O que confundiu ou travou?',answer('feedback-confusing'),'','3. O que melhoraria?',answer('feedback-improve')].join('\n');
+ try{await navigator.clipboard.writeText(txt);closeFeedback();showToast('Respostas copiadas! Cole na conversa com quem te convidou.');}
+ catch(e){const root=overlayRoot('feedback-root');let fallback=root.querySelector('#feedback-copy-fallback');if(!fallback){fallback=document.createElement('textarea');fallback.id='feedback-copy-fallback';fallback.readOnly=true;fallback.className='feedback-fallback';root.querySelector('.feedback-dialog')?.append(fallback);}fallback.value=txt;fallback.focus();fallback.select();showToast('Selecione e copie o texto para enviar ao seu amigo.');}
+}
+
 function tutorialMarkup(){
  const item=TUTORIAL_STEPS[tutorialStep],last=tutorialStep===TUTORIAL_STEPS.length-1;
  const dots=TUTORIAL_STEPS.map((_,i)=>`<span class="tutorial-dot ${i===tutorialStep?'active':i<tutorialStep?'passed':''}" aria-hidden="true"></span>`).join('');
@@ -191,7 +246,7 @@ function shell(content,stats){const [a,b,c,d,e]=nav();const today=todayKey();ret
  <aside class="sidebar"><div class="brand"><div class="brand-mark">✧</div><div><div class="brand-title">CRÔNICAS<br>DO LIMIAR</div><div class="brand-sub">neon life rpg</div></div></div>
  <div><div class="side-section">SEU TERMINAL</div><div class="nav-list">${nav().map(x=>sidebarItem(...x)).join('')}</div><button type="button" class="tutorial-sidebar-link" data-tutorial="open"><span aria-hidden="true">?</span> Como jogar</button></div>
  <div class="sidebar-footer"><span class="mini-pill">✦ JOGO LOCAL</span><div style="margin-top:11px;font:700 13px var(--font-head)">Registro real, fantasia simbólica.</div><small>Sem punição por descansar ou deixar de registrar. Seus dados pertencem a você e ficam neste navegador.</small></div></aside>
- <div class="main"><header class="topbar"><div><div class="eyebrow">✦ SESSÃO ATIVA</div><div class="topdate">${escapeHTML(formatDate(today))}</div></div><div class="top-actions"><button type="button" class="tutorial-top-button" data-tutorial="open" aria-label="Abrir tutorial de como jogar"><span aria-hidden="true">?</span> Como jogar</button><span class="top-chip top-chip-money">◈ ${stats.coins} moedas</span><span class="level-badge">NÍVEL ${stats.level}</span><button class="avatar-button" data-page="personagem" aria-label="Abrir personagem">${CLASSES[state.player.class].glyph}</button></div></header><main id="game-main">${content}</main><footer class="footer">Crônicas do Limiar // Neon · RPG de vida real · Publicável por link · Dados locais no navegador · Nenhum dia é uma derrota.</footer></div>
+ <div class="main"><header class="topbar"><div><div class="eyebrow">✦ SESSÃO ATIVA</div><div class="topdate">${escapeHTML(formatDate(today))}</div></div><div class="top-actions"><button type="button" class="tutorial-top-button" data-tutorial="open" aria-label="Abrir tutorial de como jogar"><span aria-hidden="true">?</span> Como jogar</button><span class="top-chip top-chip-money">◈ ${stats.coins} moedas</span><span class="level-badge">NÍVEL ${stats.level}</span><button class="avatar-button" data-page="personagem" aria-label="Abrir personagem">${CLASSES[state.player.class].glyph}</button></div></header><main id="game-main">${content}</main><footer class="footer">Crônicas do Limiar // Neon · RPG de vida real · Publicável por link · Dados locais no navegador · Nenhum dia é uma derrota. <button type="button" class="footer-feedback" data-feedback="open">Dar feedback sobre o jogo</button></footer></div>
  <nav class="mobile-nav" aria-label="Navegação principal">${nav().map(x=>`<button class="${view===x[0]?'active':''}" data-page="${x[0]}" aria-label="${x[2]}"><span>${x[1]}</span>${x[2].split(' ')[0]}</button>`).join('')}</nav>`;}
 function heading(title,subtitle,right=''){return `<div class="page-heading"><div><div class="eyebrow">✦ SEU TERMINAL</div><h1>${title}</h1><p>${subtitle}</p></div>${right}</div>`;}
 function section(title,sub,right=''){return `<div class="section-head"><div><div class="eyebrow">✧ PROTOCOLO LIMIAR</div><h2>${title}</h2>${sub?`<p>${sub}</p>`:''}</div>${right}</div>`;}
@@ -200,7 +255,7 @@ function currentStage(){const s=countRecords();if(s.level>=8)return 'Cidade Expa
 function taskShort(t,d){const done=!!d.completed[t.id];const starter=TASKS.find(x=>x.cat==='essencias'&&!d.completed[x.id]);const spotlight=coachActive&&!done&&t.id===starter?.id;return `<div class="task-item ${done?'done':''} ${spotlight?'intro-highlight':''}"><button class="task-check ${done?'checked':''}" data-task="${escapeHTML(t.id)}" aria-label="${done?'Desmarcar':'Concluir'}: ${escapeHTML(t.name)}" aria-pressed="${done}">${done?'✓':''}</button><div class="task-content"><strong>${escapeHTML(t.name)}</strong><p>${escapeHTML(t.desc)}</p></div><div class="task-xp">+${t.xp} XP</div></div>`;}
 function questRow(id,q,d,week=false){const ready=week?daysThisWeek()>=4:q.check(d);const claimed=ready&&(week?currentWeek().weeklyClaimed:d.claimed.includes(id));return `<div class="quest-row"><div class="quest-symbol">${q.glyph}</div><div class="quest-info"><strong>${q.name}</strong><span>${q.desc} · +${q.xp} XP, +${q.coins} ouro</span></div>${claimed?`<span class="quest-done">✓ Resgatada</span>`:`<button class="btn btn-small ${ready?'btn-primary':'btn-alt'} quest-button" data-quest="${week?'weekly':id}" ${ready?'':'disabled'}>${ready?'Resgatar':'Pendente'}</button>`}</div>`;}
 function home(stats){const d=currentDay();const tasks=getAllTasks();const n=Object.keys(d.completed).length;const completions=tasks.filter(t=>!d.completed[t.id]).slice(0,5);const recentQuest=Object.entries(QUESTS).slice(0,2);const archetype=CLASSES[state.player.class];return `
- <section class="hero"><div class="hero-content"><div class="mini-pill">✦ CAPÍTULO ATUAL · ${escapeHTML(currentStage().toUpperCase())}</div><h1>Sua rotina.<br><span>Seu universo.</span></h1><p>Um life RPG cyberpunk para qualquer pessoa. Ações comuns viram XP. O descanso conta. O trabalho conta. A busca por trabalho também conta.</p><div class="hero-links"><button class="btn btn-primary" data-page="missoes">✦ Registrar ação do dia</button><button class="btn btn-alt" data-page="batalha">⚔ Enfrentar o chefe</button></div></div></section>
+ <section class="hero"><div class="hero-content"><div class="mini-pill">✦ CAPÍTULO ATUAL · ${escapeHTML(currentStage().toUpperCase())}</div><h1>Sua rotina.<br><span>Seu universo.</span></h1><p>Um life RPG cyberpunk para qualquer pessoa. Ações comuns viram XP. O descanso conta. O trabalho conta. A busca por trabalho também conta.</p><div class="hero-links"><button class="btn btn-primary" data-page="missoes">✦ Registrar ação do dia</button><button class="btn btn-alt" data-quick="open">Primeiros passos</button><button class="btn btn-alt" data-page="batalha">⚔ Enfrentar o chefe</button></div></div></section>
  <div class="stats-grid"><div class="stat-card" data-symbol="✦"><div class="stat-label">Experiência total</div><div class="stat-val">${stats.xp.toLocaleString('pt-BR')} <span style="font-size:12px;color:var(--gold)">XP</span></div><div class="stat-foot">+${stats.todayXP} hoje</div></div><div class="stat-card" data-symbol="♛"><div class="stat-label">Nível de herói</div><div class="stat-val">${stats.level}</div><div class="stat-foot">${getRank(stats.level)}</div></div><div class="stat-card" data-symbol="☼"><div class="stat-label">Ações de hoje</div><div class="stat-val">${n}</div><div class="stat-foot">Conquistas da vida real</div></div><div class="stat-card money-card" data-symbol="◈"><div class="stat-label">Tesouro</div><div class="stat-val money-value">${stats.coins}</div><div class="stat-foot">Moedas de fantasia</div></div></div>
  ${section('Seu progresso','Evolução consistente, sem pressa e sem culpa')}<div class="grid-two"><div class="panel"><div class="panel-top"><h3>${archetype.glyph} ${archetype.title}</h3><span class="level-badge">NÍVEL ${stats.level}</span></div>${progress(stats.levelData.ratio)}<div class="progress-txt"><span>${stats.levelData.progress} / ${stats.levelData.next} XP para subir de nível</span><span>${stats.levelData.ratio}%</span></div><div class="split-wrap"><div><div class="eyebrow">HOJE</div><div style="font:700 27px var(--font-head);margin:7px 0">${n} <span style="font:500 11px var(--font-body);color:var(--muted)">ações registradas</span></div></div><button class="btn btn-alt btn-small" data-page="personagem">Ver atributos →</button></div><div class="feature-note small-mt">Seu personagem melhora conforme você realiza ações de diferentes áreas. Não há sequência obrigatória, perda de XP por ausência ou meta mínima para ser um bom dia.</div></div>
  <div class="panel"><div class="panel-top"><h3>✦ Protocolos do dia</h3><span class="panel-sub">3 desafios</span></div><div class="quest-list">${recentQuest.map(([id,q])=>questRow(id,q,d)).join('')}</div><button class="text-action small-mt" data-page="missoes">Ver todas as missões →</button></div></div>
@@ -240,6 +295,8 @@ function importSave(file){if(!file||file.size>3*1024*1024){showToast('Arquivo in
 function resetSave(){if(!confirm('Apagar TODO o progresso, diário e dados deste navegador? Esta ação não pode ser desfeita.'))return;if(!confirm('Última confirmação: você já exportou um backup, se precisar?'))return;localStorage.removeItem(STORAGE_KEY);state=normalize({});view='inicio';render();showToast('Um novo perfil foi iniciado.');}
 
 document.addEventListener('click',ev=>{const button=ev.target.closest('button');if(!button)return;const a=button.dataset;
+ if(a.quick){handleQuickStart(a.quick);return;}
+ if(a.feedback){if(a.feedback==='open')openFeedback();else if(a.feedback==='close')closeFeedback();else if(a.feedback==='copy')copyFeedback();return;}
  if(a.tutorial){handleTutorialAction(a.tutorial);return;}
  if(a.coachDismiss){coachActive=false;render();return;}
  if(a.page){view=a.page;window.scrollTo({top:0,behavior:'instant'});render();return;}
@@ -256,6 +313,10 @@ document.addEventListener('click',ev=>{const button=ev.target.closest('button');
  if(a.reset){resetSave();return;}
 });
 document.addEventListener('keydown',ev=>{
+ if(quickStartOpen||feedbackOpen){
+  if(ev.key==='Escape'){ev.preventDefault();if(quickStartOpen)closeQuickStart();else closeFeedback();return;}
+  if(ev.key==='Tab'){const root=document.getElementById(quickStartOpen?'quickstart-root':'feedback-root');const fields=[...(root?.querySelectorAll('button,textarea')||[])].filter(x=>!x.disabled);if(fields.length){if(ev.shiftKey&&document.activeElement===fields[0]){ev.preventDefault();fields.at(-1).focus();}else if(!ev.shiftKey&&document.activeElement===fields.at(-1)){ev.preventDefault();fields[0].focus();}}}return;
+ }
  if(!tutorialOpen)return;
  if(ev.key==='Escape'){ev.preventDefault();closeTutorial();return;}
  if(ev.key!=='Tab')return;
@@ -274,6 +335,6 @@ document.addEventListener('change',ev=>{if(ev.target.id==='import-file')importSa
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&todayKey()!==lastDay){render();}});
 window.addEventListener('pageshow',()=>{if(todayKey()!==lastDay)render();});
 currentDay();currentWeek();save();render();
-try{if(localStorage.getItem(TUTORIAL_KEY)!=='seen')openTutorial();}catch(e){openTutorial();}
+try{if(countRecords().actions===0&&localStorage.getItem(QUICKSTART_KEY)!=='seen'&&localStorage.getItem(TUTORIAL_KEY)!=='seen')showQuickStart();}catch(e){if(countRecords().actions===0)showQuickStart();}
 if('serviceWorker' in navigator && location.protocol.startsWith('http'))navigator.serviceWorker.register('./sw.js').catch(()=>{});
 
